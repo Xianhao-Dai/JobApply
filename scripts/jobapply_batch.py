@@ -69,15 +69,17 @@ def select_route(job, referral_records, now, policy=None, preference=None):
 
 
 def draft_tasks(ledger, stage, job_ids, limit):
+    root = ledger.root
     db = ledger.db
     settings = {p["key"]: json.loads(p["value_json"]) for p in rows(db, "SELECT * FROM settings")}
     base = first(db, "SELECT * FROM resumes WHERE resume_id=?", (settings.get("active_base_resume_id"),))
     now = now_utc()
     timing_policy = preparation_timing_policy(db)
+    scope = settings.get("employment_scope") or {}
     answers_ref = settings.get("candidate_answers_ref")
     if isinstance(answers_ref, str):
-        answers_path = ROOT / answers_ref
-        if (Path(answers_ref).is_absolute() or not answers_path.resolve().is_relative_to(ROOT.resolve())
+        answers_path = root / answers_ref
+        if (Path(answers_ref).is_absolute() or not answers_path.resolve().is_relative_to(root)
                 or not answers_path.is_file()):
             answers_ref = None
     else:
@@ -138,11 +140,13 @@ def draft_tasks(ledger, stage, job_ids, limit):
             data = {"jd_path": job["jd_path"], **base_resume_input(base),
                     "candidate_constraints": {"graduation_month": context["graduation_month"],
                                               "employment_type": context["employment_type"],
-                                              "availability": context["availability"], "locations": "US / US Remote",
+                                              "availability": context["availability"],
+                                              "locations": scope.get("locations", "US / US Remote"),
                                               "target": ("Software development internship" if
                                                          context["employment_type"] == "internship" else
                                                          "Full-time software engineering"),
                                               "sponsorship": settings.get("candidate_sponsorship"),
+                                              "work_authorization": settings.get("candidate_work_authorization"),
                                               "experience_evidence": "current_resume_only"}}
             if "career_scope" in context:
                 data["candidate_constraints"]["career_scope"] = context["career_scope"]
@@ -251,7 +255,7 @@ def draft_tasks(ledger, stage, job_ids, limit):
             if not job_ids and previous["run_after_at"] and datetime.fromisoformat(previous["run_after_at"]) > now:
                 continue
             attempt = previous["current_attempt"] + 1
-        directory = ROOT / "state/staging" / task_id / str(attempt)
+        directory = root / "state/staging" / task_id / str(attempt)
         directory.mkdir(parents=True, exist_ok=True)
         target = directory / "task.json"
         if target.exists():
@@ -267,12 +271,13 @@ def draft_tasks(ledger, stage, job_ids, limit):
                 json.dump(task, out, ensure_ascii=False, indent=2)
         if ledger.dispatch(task)["outcome"] == "superseded":
             continue
-        print(target.relative_to(ROOT))
+        print(target.relative_to(root))
         emitted += 1
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=ROOT, help="Private workspace root")
     commands = parser.add_subparsers(dest="command", required=True)
     batch = commands.add_parser("collect")
     batch.add_argument("results", nargs="+")
@@ -281,11 +286,16 @@ def main():
     tasks.add_argument("--limit", type=int, default=6)
     tasks.add_argument("job_ids", nargs="*")
     args = parser.parse_args()
-    ledger = Ledger(root=ROOT)
-    if args.command == "collect":
-        return collect(ledger, args.results)
-    draft_tasks(ledger, args.stage, args.job_ids, args.limit)
-    return 0
+    ledger = Ledger(root=args.root)
+    try:
+        if args.command == "collect":
+            return collect(ledger, args.results)
+        if args.limit < 1:
+            parser.error("--limit must be positive")
+        draft_tasks(ledger, args.stage, args.job_ids, args.limit)
+        return 0
+    finally:
+        ledger.close()
 
 
 if __name__ == "__main__":
