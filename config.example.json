@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "resume": {
+    "path": "resume/Candidate Resume.pdf",
+    "sha256": null
+  },
+  "candidate": {
+    "graduation_month": null,
+    "earliest_start_date": null,
+    "work_authorization": null,
+    "future_sponsorship_required": null,
+    "answers_ref": null,
+    "internship_plan": null
+  },
+  "scope": {
+    "employment_types": ["full_time"],
+    "locations": ["US", "US Remote"],
+    "career_levels": ["new_grad", "early_career", "experienced_2_3_years"],
+    "max_required_experience_years": 3
+  },
+  "sources": {
+    "linkedin:jobs": {
+      "enabled": false,
+      "url": "https://www.linkedin.com/jobs/"
+    },
+    "newgrad-jobs:us": {
+      "enabled": false,
+      "url": "https://www.newgrad-jobs.com/"
+    },
+    "speedyapply:2027-us-newgrad": {
+      "enabled": false,
+      "url": "https://github.com/speedyapply/2027-SWE-College-Jobs/blob/main/NEW_GRAD_USA.md"
+    },
+    "glassdoor:jobs": {
+      "enabled": false,
+      "url": null
+    }
+  },
+  "limits": {
+    "max_jobs": 10,
+    "max_source_rows": 200,
+    "max_tasks": 8
+  },
+  "capabilities": {
+    "web_research": false,
+    "prepare_forms": false,
+    "contact_research": false,
+    "mail_read": false
+  }
+}
