@@ -1,4 +1,5 @@
 """Read the SQLite ledger and build the data behind the JobApply workbooks."""
+import argparse
 import csv
 import json
 import sqlite3
@@ -32,8 +33,8 @@ MATCH = (
 )
 
 
-def connect():
-    db = sqlite3.connect(f"{(ROOT / 'state/jobapply.sqlite').as_uri()}?mode=ro", uri=True)
+def connect(root):
+    db = sqlite3.connect(f"{(root / 'state/jobapply.sqlite').as_uri()}?mode=ro", uri=True)
     db.row_factory = sqlite3.Row
     db.execute("BEGIN")
     return db
@@ -43,8 +44,8 @@ def table(db, sql, params=()):
     return [dict(row) for row in db.execute(sql, params)]
 
 
-def csv_export(relative, fields, rows):
-    target = ROOT / relative
+def csv_export(root, relative, fields, rows):
+    target = root / relative
     target.parent.mkdir(exist_ok=True, parents=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="", dir=target.parent, delete=False) as handle:
         pending = Path(handle.name)
@@ -111,8 +112,9 @@ def freshness_metadata(job, sources, now, manual=False, retained=False):
             "effective_posted_at_pt": effective}
 
 
-def export():
-    with connect() as db:
+def export(root=None):
+    root = Path(root or ROOT).resolve()
+    with connect(root) as db:
         jobs = table(db, """
           SELECT j.*, c.display_name company FROM jobs j JOIN companies c USING (company_key)
           ORDER BY COALESCE(j.published_at,'') DESC, j.first_seen_at DESC, j.job_id
@@ -151,14 +153,14 @@ def export():
                                           job["job_id"] in manual_ids, job["job_id"] in admissions))
             job["discovery_status"] = freshness[job["job_id"]]
             job["workflow_admitted_at_pt"] = admissions.get(job["job_id"])
-        csv_export(
+        csv_export(root,
             "positions/discovered.csv",
             ("job_id company_key company official_req_id title location listing_state official_url "
              "published_at published_at_basis reposted_at reposted_at_basis repost_observed_at repost_label "
              "effective_posted_at freshness_basis first_seen_at last_verified_at closes_at jd_revision source_keys").split(),
             [j for j in jobs if j["job_id"] in active_ids],
         )
-        csv_export(
+        csv_export(root,
             "positions/curated_leads.csv",
             ("source_key source_listing_id company_as_listed title_as_listed location_as_listed "
              "observed_url published_at_as_listed reposted_at reposted_at_basis repost_observed_at repost_label "
@@ -339,13 +341,22 @@ def export():
     return books
 
 
-if __name__ == "__main__":
-    if sys.argv[1:] == ["manual"]:
-        from jobapply_ledger import Ledger
-        ledger = Ledger(root=ROOT)
-        feedback = []
-        for row in json.load(sys.stdin):
-            feedback.append({"update_id": row["update_id"], **ledger.apply_manual(row)})
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=ROOT, help="Private workspace root")
+    parser.add_argument("command", nargs="?", choices=("export", "manual"), default="export")
+    args = parser.parse_args()
+    if args.command == "export":
+        print(json.dumps(export(args.root), ensure_ascii=False))
+        return
+    from jobapply_ledger import Ledger
+    ledger = Ledger(root=args.root)
+    try:
+        feedback = [{"update_id": row["update_id"], **ledger.apply_manual(row)} for row in json.load(sys.stdin)]
         print(json.dumps(feedback, ensure_ascii=False))
-    else:
-        print(json.dumps(export(), ensure_ascii=False))
+    finally:
+        ledger.close()
+
+
+if __name__ == "__main__":
+    main()

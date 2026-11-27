@@ -8,6 +8,7 @@ import re
 import sqlite3
 import sys
 import unicodedata
+from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from jobapply_ledger import ROOT, ContractError, Ledger, digest, json_text, time_utc
@@ -215,6 +216,7 @@ class Intake:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=ROOT, help="Private workspace root")
     parser.add_argument("--db", help="Alternate SQLite path for an isolated workspace.")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init", help="Ensure the additive lead table exists.")
@@ -228,7 +230,7 @@ def main():
     args = parser.parse_args()
     ledger = None
     try:
-        ledger = Ledger(root=ROOT, db_path=args.db)
+        ledger = Ledger(root=args.root, db_path=args.db)
         intake = Intake(ledger)
         if args.command == "add":
             result = intake.add(company=args.company, title=args.title, location=args.location,

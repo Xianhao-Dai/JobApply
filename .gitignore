@@ -1,4 +1,5 @@
 # Private runtime outputs and local integrations
+/.jobapply/
 /state/
 /resume/
 /positions/
